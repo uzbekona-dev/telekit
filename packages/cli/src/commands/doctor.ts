@@ -18,10 +18,10 @@ export interface DoctorOptions extends CommandOptions {
 
 const TELEGRAM_TIMEOUT_MS = 8000;
 
-/** `engines.node` of every Telekit package: `>=20.11.0`. */
+/** `engines.node` of every Telekit package: `>=22.13.0` (`node:sqlite`). */
 export function isNodeVersionOk(version: string = process.versions.node): boolean {
   const [major = 0, minor = 0] = version.split(".").map(Number);
-  return major > 20 || (major === 20 && minor >= 11);
+  return major > 22 || (major === 22 && minor >= 13);
 }
 
 /** `<bot id>:<secret>` as @BotFather issues it — catches pasted quotes, spaces and truncated tokens before any network call. */
@@ -61,7 +61,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<number> {
   const nodeOk = isNodeVersionOk();
   const hasEnvFile = existsSync(path.join(cwd, ".env"));
   const checks: Check[] = [
-    { label: `Node.js ${process.versions.node}`, status: nodeOk, detail: nodeOk ? undefined : "talab: >=20.11.0" },
+    { label: `Node.js ${process.versions.node}`, status: nodeOk, detail: nodeOk ? undefined : "talab: >=22.13.0" },
     {
       label: ".env fayli",
       status: hasEnvFile ? true : "warn",

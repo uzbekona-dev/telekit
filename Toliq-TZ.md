@@ -821,7 +821,7 @@ GitHub: `telekit/telekit`.
 ### Node.js versiyasi
 
 ```json
-"engines": { "node": ">=20.11.0" }
+"engines": { "node": ">=22.13.0" }
 ```
 
 Sabab: `node:test` barqaror, `AsyncLocalStorage` performansi, native `fetch` barqaror, ESM to‘liq. Node 18 EOL — 2025-04.
@@ -830,7 +830,7 @@ Runtime matritsasi ([§41](#41-scaling-va-deployment-topologiyasi)da to‘liq):
 
 | Runtime | v1.0 | Cheklov |
 |---|---|---|
-| Node ≥ 20.11 | ✅ birlamchi | — |
+| Node ≥ 22.13 | ✅ birlamchi | `node:sqlite` uchun |
 | Bun ≥ 1.1 | ✅ | `better-sqlite3` → `bun:sqlite` |
 | Deno ≥ 2 | 🟡 eksperimental | — |
 | Cloudflare Workers | 🟡 eksperimental | polling yo‘q, DB → D1/Hyperdrive |
@@ -2421,7 +2421,7 @@ Bot tayyor · o‘zgarishlar kuzatilmoqda
 
 ```text
 MUHIT
-  ✓ Node.js 22.11.0                    (talab: ≥20.11)
+  ✓ Node.js 22.13.0                    (talab: ≥22.13)
   ✓ Paket menejeri  pnpm 9.12.0
   ✓ Disk bo‘sh joyi  18 GB
 
@@ -4331,7 +4331,6 @@ Create.  Build.  Test.  Manage.  Deploy.
 ```
 
 Barchasi bitta framework ichida.
-
 
 
 

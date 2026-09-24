@@ -34,7 +34,7 @@ O‘zbekcha developer experience’ga yo‘naltirilgan modular TypeScript Telegr
 
 ## Talablar
 
-- Node.js 20.11 yoki yangiroq
+- Node.js 22.13 yoki yangiroq (`node:sqlite` talab qilinadi)
 - pnpm 11
 
 ## Ishga tushirish
@@ -60,7 +60,7 @@ pnpm --filter minimal-bot dev
 - 68 ta test fayli
 - 507 ta avtomatik test
 - barcha workspace paketlari TypeScript strict mode’da tekshiriladi
-- GitHub Actions’da Node.js 20, 22 va 24 matritsasi
+- GitHub Actions’da Node.js 22 va 24 matritsasi
 
 ## Hujjatlar
 

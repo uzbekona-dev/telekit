@@ -4,6 +4,7 @@
   "description": "Complete Telegram Bot API and Telekit framework types",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/uzbekona-dev/telekit.git", "directory": "packages/types" },
+  "engines": { "node": ">=22.13.0" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

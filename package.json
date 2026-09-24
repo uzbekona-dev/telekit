@@ -9,7 +9,7 @@
   },
   "packageManager": "pnpm@11.22.0",
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "build:packages": "pnpm --filter \"./packages/**\" -r run build",

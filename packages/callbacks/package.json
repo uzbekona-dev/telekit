@@ -4,6 +4,7 @@
   "description": "Typed and signed callback payloads for Telekit",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/uzbekona-dev/telekit.git", "directory": "packages/callbacks" },
+  "engines": { "node": ">=22.13.0" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

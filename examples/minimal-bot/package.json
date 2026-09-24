@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.1.0",
+  "engines": { "node": ">=22.13.0" },
   "scripts": {
     "prepare:telekit": "pnpm --dir ../.. run build:packages",
     "dev": "pnpm run prepare:telekit && node ../../packages/cli/dist/bin.js dev",
