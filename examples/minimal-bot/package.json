@@ -4,10 +4,11 @@
   "type": "module",
   "version": "0.1.0",
   "scripts": {
-    "dev": "telekit dev",
-    "build": "telekit build",
-    "start": "telekit start",
-    "doctor": "telekit doctor"
+    "prepare:telekit": "pnpm --dir ../.. run build:packages",
+    "dev": "pnpm run prepare:telekit && node ../../packages/cli/dist/bin.js dev",
+    "build": "pnpm run prepare:telekit && node ../../packages/cli/dist/bin.js build",
+    "start": "node ../../packages/cli/dist/bin.js start",
+    "doctor": "pnpm run prepare:telekit && node ../../packages/cli/dist/bin.js doctor"
   },
   "dependencies": {
     "@telekit/callbacks": "workspace:*",
