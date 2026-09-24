@@ -26,7 +26,7 @@ const demoMigrations = vi.fn<(driver: "sqlite" | "postgres") => MigrationProvide
 function configWith(env: TelekitConfig["app"]["env"], providers: MigrationSource[]): TelekitConfig {
   return {
     ...DEFAULT_CONFIG,
-    app: { ...DEFAULT_CONFIG.app, env },
+    app: { ...DEFAULT_CONFIG.app, env, key: env === "production" ? Buffer.alloc(32, 1).toString("base64") : "" },
     bot: { ...DEFAULT_CONFIG.bot, token: "123:test", mode: "polling" },
     database: { driver: "sqlite", file: ":memory:", url: null, migrations: { providers } },
     logging: { level: "fatal", pretty: false },

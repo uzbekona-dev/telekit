@@ -9,6 +9,10 @@ export interface SessionMiddlewareOptions {
   key?: SessionKeyStrategy;
   /** e.g. "30d". Omit for no expiry. */
   ttl?: string;
+  /** Maximum serialized session size. Defaults to 64 KiB. */
+  maxBytes?: number;
+  /** Optimistic-lock retries after the first write. Defaults to 1. */
+  conflictRetries?: number;
 }
 
 export class SessionConflictError extends TelekitError {
@@ -18,6 +22,17 @@ export class SessionConflictError extends TelekitError {
       `Session "${key}" boshqa so'rov tomonidan bir vaqtda yozildi (optimistik qulf mos kelmadi)`,
     );
   }
+}
+
+export class SessionTooLargeError extends TelekitError {
+  constructor(key: string, actualBytes: number, maxBytes: number) {
+    super("TK2302", `Session "${key}" ${actualBytes} bayt — ruxsat etilgan maksimum ${maxBytes} bayt`);
+  }
+}
+
+function changedTopLevelKeys(before: Record<string, unknown>, after: Record<string, unknown>): Set<string> {
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return new Set([...keys].filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key])));
 }
 
 function deriveKey(ctx: Context, strategy: SessionKeyStrategy): string | null {
@@ -38,6 +53,8 @@ type MutableContext = { -readonly [K in keyof Context]: Context[K] };
 export function sessions(options: SessionMiddlewareOptions): Middleware {
   const keyStrategy = options.key ?? "user-chat";
   const ttlMs = options.ttl ? parseDuration(options.ttl) : null;
+  const maxBytes = options.maxBytes ?? 64 * 1024;
+  const conflictRetries = options.conflictRetries ?? 1;
 
   return async (ctx, next) => {
     const key = deriveKey(ctx, keyStrategy);
@@ -47,18 +64,32 @@ export function sessions(options: SessionMiddlewareOptions): Middleware {
     }
 
     const record = await options.store.load(key);
-    const data: Record<string, unknown> = record ? { ...record.data } : {};
+    const data: Record<string, unknown> = record ? structuredClone(record.data) : {};
+    const beforeData = structuredClone(data);
     const before = JSON.stringify(data);
-    const version = record?.version ?? 0;
 
     (ctx as MutableContext).session = data;
 
     await next();
 
     if (JSON.stringify(data) !== before) {
-      const ok = await options.store.save(key, data, version, ttlMs);
-      if (!ok) {
-        throw new SessionConflictError(key);
+      const changedKeys = changedTopLevelKeys(beforeData, data);
+      let candidate = data;
+      let version = record?.version ?? 0;
+
+      for (let attempt = 0; attempt <= conflictRetries; attempt++) {
+        const bytes = Buffer.byteLength(JSON.stringify(candidate), "utf8");
+        if (bytes > maxBytes) throw new SessionTooLargeError(key, bytes, maxBytes);
+        if (await options.store.save(key, candidate, version, ttlMs)) return;
+        if (attempt === conflictRetries) throw new SessionConflictError(key);
+
+        const latest = await options.store.load(key);
+        candidate = latest ? structuredClone(latest.data) : {};
+        version = latest?.version ?? 0;
+        for (const changedKey of changedKeys) {
+          if (Object.hasOwn(data, changedKey)) candidate[changedKey] = structuredClone(data[changedKey]);
+          else delete candidate[changedKey];
+        }
       }
     }
   };

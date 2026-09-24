@@ -2,6 +2,11 @@
   "name": "telekit-monorepo",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uzbekona-dev/telekit.git"
+  },
   "packageManager": "pnpm@11.22.0",
   "engines": {
     "node": ">=20.11.0"

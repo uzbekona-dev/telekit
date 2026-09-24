@@ -44,3 +44,10 @@ export class FlowDefinitionError extends TelekitError {
     super("TK2206", `defineFlow("${name}"): ${detail}`);
   }
 }
+
+/** A different process created an active conversation for the same key first. */
+export class ConversationConflictError extends TelekitError {
+  constructor(key: string) {
+    super("TK2207", `"${key}" uchun boshqa faol conversation allaqachon mavjud`, { retryable: true });
+  }
+}

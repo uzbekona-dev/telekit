@@ -174,6 +174,19 @@ describe("TelegramApi.call", () => {
     expect(typeof init.body).toBe("string");
   });
 
+  it("extracts UploadableFile values nested inside media arrays", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(fakeResponse({ ok: true, result: [] }));
+    const api = new TelegramApi({ token: "123:abc", fetchImpl });
+    const file = { filename: "album.jpg", toBlob: () => new Blob(["album"], { type: "image/jpeg" }) };
+
+    await api.sendMediaGroup({ chat_id: 1, media: [{ type: "photo", media: file }] });
+
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const form = init.body as FormData;
+    expect(JSON.parse(String(form.get("media")))).toEqual([{ type: "photo", media: "attach://file_1" }]);
+    expect(form.get("file_1")).toBeInstanceOf(Blob);
+  });
+
   it("raw() calls an arbitrary method name with the same retry/logging behavior", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(fakeResponse({ ok: true, result: { ok: true } }));
     const api = new TelegramApi({ token: "123:abc", fetchImpl });
@@ -183,5 +196,16 @@ describe("TelegramApi.call", () => {
     expect(result).toEqual({ ok: true });
     const [url] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://api.telegram.org/bot123:abc/someFutureMethod");
+  });
+
+  it("types and calls methods outside Telekit's original hand-written subset", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(fakeResponse({ ok: true, result: true }));
+    const api = new TelegramApi({ token: "123:abc", fetchImpl });
+
+    const result = await api.call("banChatMember", { chat_id: 1, user_id: 2, revoke_messages: true });
+
+    expect(result).toBe(true);
+    const [url] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url.endsWith("/banChatMember")).toBe(true);
   });
 });

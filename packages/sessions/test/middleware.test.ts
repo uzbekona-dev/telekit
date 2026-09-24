@@ -1,6 +1,6 @@
 import type { Context } from "@telekit/core";
 import { describe, expect, it, vi } from "vitest";
-import { sessions, SessionConflictError } from "../src/middleware.js";
+import { sessions, SessionConflictError, SessionTooLargeError } from "../src/middleware.js";
 import { MemorySessionStore } from "../src/memory-store.js";
 import type { SessionStore } from "../src/types.js";
 
@@ -86,5 +86,36 @@ describe("sessions() middleware", () => {
         (ctx.session as Record<string, unknown>).x = 1;
       }),
     ).rejects.toBeInstanceOf(SessionConflictError);
+  });
+
+  it("retries once and merges this request's changed keys onto the latest session", async () => {
+    const store = new MemorySessionStore();
+    await store.save("user-chat:1:2", { mine: 0, theirs: 0 }, 0, null);
+    const originalSave = store.save.bind(store);
+    let raced = false;
+    vi.spyOn(store, "save").mockImplementation(async (key, data, version, ttl) => {
+      if (!raced) {
+        raced = true;
+        await originalSave(key, { mine: 0, theirs: 1 }, version, ttl);
+      }
+      return originalSave(key, data, version, ttl);
+    });
+    const mw = sessions({ store });
+    const ctx = fakeCtx({ chat: { id: 1, type: "private" }, from: { id: 2, is_bot: false, first_name: "A" } });
+
+    await mw(ctx, async () => {
+      (ctx.session as Record<string, unknown>).mine = 1;
+    });
+
+    expect((await store.load("user-chat:1:2"))?.data).toEqual({ mine: 1, theirs: 1 });
+  });
+
+  it("rejects serialized sessions larger than maxBytes", async () => {
+    const mw = sessions({ store: new MemorySessionStore(), maxBytes: 16 });
+    const ctx = fakeCtx({ chat: { id: 1, type: "private" }, from: { id: 2, is_bot: false, first_name: "A" } });
+
+    await expect(mw(ctx, async () => {
+      (ctx.session as Record<string, unknown>).large = "x".repeat(100);
+    })).rejects.toBeInstanceOf(SessionTooLargeError);
   });
 });

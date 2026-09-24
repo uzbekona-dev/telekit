@@ -22,6 +22,16 @@ describe("MemorySessionStore", () => {
     expect(await store.load("k")).toEqual({ data: { count: 2 }, version: 2 });
   });
 
+  it("clones nested values so failed middleware cannot mutate stored state by reference", async () => {
+    const store = new MemorySessionStore();
+    await store.save("k", { nested: { count: 1 } }, 0, null);
+
+    const loaded = await store.load("k");
+    (loaded!.data.nested as { count: number }).count = 99;
+
+    expect(await store.load("k")).toEqual({ data: { nested: { count: 1 } }, version: 1 });
+  });
+
   it("rejects a save whose expectedVersion is stale (optimistic lock)", async () => {
     const store = new MemorySessionStore();
     await store.save("k", { count: 1 }, 0, null);

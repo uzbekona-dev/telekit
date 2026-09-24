@@ -27,6 +27,7 @@ export {
 } from "./define-flow.js";
 export {
   ConversationNotFoundError,
+  ConversationConflictError,
   ConversationReplayMismatchError,
   ConversationSideEffectError,
   ConversationTimeoutError,

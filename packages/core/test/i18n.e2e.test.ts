@@ -23,6 +23,7 @@ function testConfig(overrides: Partial<TelekitConfig> = {}): TelekitConfig {
   return {
     ...DEFAULT_CONFIG,
     bot: { ...DEFAULT_CONFIG.bot, token: "123:test", mode: "polling" },
+    database: { ...DEFAULT_CONFIG.database, driver: "none", file: "", url: null },
     dedup: { ...DEFAULT_CONFIG.dedup, ttl: "5m" },
     logging: { level: "error", pretty: false },
     ...overrides,

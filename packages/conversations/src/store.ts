@@ -1,5 +1,6 @@
 import type { Kysely } from "kysely";
 import { emptyLog, type ConversationLog } from "./log.js";
+import { ConversationConflictError } from "./errors.js";
 
 export type ConversationStatus = "active" | "done" | "cancelled" | "timeout";
 
@@ -7,6 +8,8 @@ export interface ConversationRecord {
   id: string;
   key: string;
   name: string;
+  /** Immutable value passed to `ctx.enter(name, params)` or `flow.goto(name, params)`. */
+  params: unknown;
   log: ConversationLog;
   checkpointId: string | null;
   checkpointState: unknown;
@@ -34,6 +37,7 @@ export interface NewConversation {
   id: string;
   key: string;
   name: string;
+  params?: unknown;
   chatId: number | null;
   userId: number | null;
   expiresAt: Date | null;
@@ -53,6 +57,7 @@ interface ConversationsTable {
   id: string;
   key: string;
   name: string;
+  params: string;
   log: string;
   checkpoint_id: string | null;
   checkpoint_state: string | null;
@@ -75,6 +80,7 @@ function toDomain(row: ConversationsTable): ConversationRecord {
     id: row.id,
     key: row.key,
     name: row.name,
+    params: JSON.parse(row.params) as unknown,
     log: JSON.parse(row.log) as ConversationLog,
     checkpointId: row.checkpoint_id,
     checkpointState: row.checkpoint_state ? (JSON.parse(row.checkpoint_state) as unknown) : undefined,
@@ -123,6 +129,7 @@ export class DatabaseConversationStore implements ConversationStore {
       id: record.id,
       key: record.key,
       name: record.name,
+      params: JSON.stringify(record.params ?? null),
       log: JSON.stringify(emptyLog()),
       checkpoint_id: null,
       checkpoint_state: null,
@@ -135,7 +142,15 @@ export class DatabaseConversationStore implements ConversationStore {
       updated_at: now,
       expires_at: record.expiresAt ? record.expiresAt.toISOString() : null,
     };
-    await this.db.insertInto("telekit_conversations").values(row).execute();
+    try {
+      await this.db.insertInto("telekit_conversations").values(row).execute();
+    } catch (error) {
+      // The partial unique index guarantees one active row per key across
+      // processes. Only translate an insert error when that active row now
+      // actually exists; unrelated database failures retain their cause.
+      if (await this.findActive(record.key).catch(() => null)) throw new ConversationConflictError(record.key);
+      throw error;
+    }
     return toDomain(row);
   }
 

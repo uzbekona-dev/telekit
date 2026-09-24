@@ -33,6 +33,8 @@ interface PromptMessage {
 
 export interface FlowControllerOptions {
   name: string;
+  /** Immutable value supplied when the conversation was entered. */
+  params?: unknown;
   log: ConversationLog;
   /** `undefined` on the turn that *starts* the conversation — that update triggered `ctx.enter()`, it isn't an answer to anything. */
   incomingUpdate: Update | undefined;
@@ -64,6 +66,8 @@ function isValidResult(result: ValidateResult): boolean {
  * send a prompt and wait for the next one.
  */
 export class FlowController {
+  /** Value passed to `ctx.enter(name, params)` or `flow.goto(name, params)`. */
+  readonly params: unknown;
   private readonly cursor: LogCursor;
   private readonly newEntries: LogEntry[] = [];
   private consumedIncoming = false;
@@ -73,6 +77,7 @@ export class FlowController {
   private nextIndexCounter: number;
 
   constructor(private readonly options: FlowControllerOptions) {
+    this.params = options.params;
     this.cursor = new LogCursor(options.log);
     this.pendingAttempts = options.pendingAttempts;
     this.nextIndexCounter = options.log.entries.length;

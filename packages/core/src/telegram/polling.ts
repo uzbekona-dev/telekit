@@ -11,6 +11,8 @@ export interface PollerOptions {
   onUpdate: (update: Update) => void | Promise<void>;
   onError?: (error: unknown) => void;
   logger?: Logger;
+  /** Bounds updates handed to the application before polling pauses for capacity. */
+  maxInFlight?: number;
   /** Time source for the between-failures backoff — defaults to `RealClock`. */
   clock?: Clock;
 }
@@ -30,7 +32,9 @@ export class Poller {
   private offset = 0;
   private loopPromise: Promise<void> = Promise.resolve();
   private abortController = new AbortController();
+  private abortPromise: Promise<void> = Promise.resolve();
   private readonly clock: Clock;
+  private readonly inFlight = new Set<Promise<void>>();
 
   constructor(private readonly options: PollerOptions) {
     this.clock = options.clock ?? new RealClock();
@@ -40,6 +44,9 @@ export class Poller {
     if (this.running) return;
     this.running = true;
     this.abortController = new AbortController();
+    this.abortPromise = new Promise((resolve) => {
+      this.abortController.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
     this.loopPromise = this.loop();
   }
 
@@ -71,12 +78,19 @@ export class Poller {
       }
 
       for (const update of updates) {
-        this.offset = update.update_id + 1;
-        try {
-          await this.options.onUpdate(update);
-        } catch (err) {
-          this.options.onError?.(err);
+        while (this.running && this.inFlight.size >= (this.options.maxInFlight ?? 100)) {
+          await Promise.race([
+            ...this.inFlight,
+            this.abortPromise,
+          ]);
         }
+        if (!this.running) break;
+        this.offset = update.update_id + 1;
+        const task = Promise.resolve(this.options.onUpdate(update))
+          .catch((err: unknown) => this.options.onError?.(err))
+          .then(() => undefined);
+        this.inFlight.add(task);
+        void task.finally(() => this.inFlight.delete(task));
       }
     }
   }

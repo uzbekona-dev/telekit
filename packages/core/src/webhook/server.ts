@@ -16,6 +16,8 @@ export interface WebhookServerOptions {
   /** `"immediate"` (default): 200 right after parsing, handler runs after. `"await"`: 200 only once the handler finishes — required on serverless (spec §14.6). */
   responseMode: "immediate" | "await";
   onUpdate: (update: Update) => void | Promise<void>;
+  /** Fast admission check used to return 429 before reading/enqueuing more work. */
+  canAccept?: () => boolean;
   logger?: Logger;
 }
 
@@ -27,6 +29,7 @@ function respond(res: ServerResponse, status: number, body = ""): void {
 /** Minimal `node:http`-based webhook ingress (spec §14.5) — no framework dependency, mirroring the project's "no unnecessary runtime deps" stance (ADR-005). */
 export class WebhookServer {
   private readonly server: Server;
+  private draining = false;
 
   constructor(private readonly options: WebhookServerOptions) {
     this.server = createServer((req, res) => {
@@ -59,9 +62,25 @@ export class WebhookServer {
     });
   }
 
+  setDraining(): void {
+    this.draining = true;
+  }
+
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.method !== "POST" || req.url !== this.options.path) {
       respond(res, 404, "not found");
+      return;
+    }
+
+    if (this.draining) {
+      res.setHeader("retry-after", "1");
+      respond(res, 503, "draining");
+      return;
+    }
+
+    if (this.options.canAccept && !this.options.canAccept()) {
+      res.setHeader("retry-after", "1");
+      respond(res, 429, "busy");
       return;
     }
 

@@ -3,6 +3,7 @@ export { MemorySessionStore } from "./memory-store.js";
 export {
   sessions,
   SessionConflictError,
+  SessionTooLargeError,
   type SessionKeyStrategy,
   type SessionMiddlewareOptions,
 } from "./middleware.js";

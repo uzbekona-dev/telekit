@@ -7,6 +7,10 @@ interface Entry {
   expiresAt: number | null;
 }
 
+function cloneData(data: Record<string, unknown>): Record<string, unknown> {
+  return structuredClone(data);
+}
+
 /** Single-process only — restart or a second instance loses all sessions (spec §41.1). */
 export class MemorySessionStore implements SessionStore {
   private readonly entries = new Map<string, Entry>();
@@ -21,7 +25,7 @@ export class MemorySessionStore implements SessionStore {
       this.entries.delete(key);
       return null;
     }
-    return { data: entry.data, version: entry.version };
+    return { data: cloneData(entry.data), version: entry.version };
   }
 
   async save(
@@ -35,7 +39,7 @@ export class MemorySessionStore implements SessionStore {
     if (currentVersion !== expectedVersion) return false;
 
     this.entries.set(key, {
-      data,
+      data: cloneData(data),
       version: currentVersion + 1,
       expiresAt: ttlMs !== null ? this.clock.now() + ttlMs : null,
     });

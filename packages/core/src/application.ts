@@ -20,7 +20,7 @@ import { resolveAppKey } from "./key.js";
 import { createLogger, type Logger } from "./logger.js";
 import { compose, type Middleware } from "./middleware.js";
 import { UpdateDedup } from "./pipeline/dedup.js";
-import { ChatSequencer } from "./pipeline/sequencer.js";
+import { UpdateExecutor } from "./pipeline/executor.js";
 import type { CommandDefinition, EventDefinition, InlineDefinition } from "./router.js";
 import { Router } from "./router.js";
 import { TelegramApi } from "./telegram/client.js";
@@ -45,13 +45,39 @@ function extractChatId(update: Update): number | undefined {
   );
 }
 
+function assertRuntimeSecurity(config: TelekitConfig): void {
+  if (config.app.env === "production" && !config.callbacks.sign && !config.callbacks.allowUnsignedInProduction) {
+    throw new ConfigurationError("TK1003", "Production'da unsigned callback taqiqlangan");
+  }
+  if (config.callbacks.sign && config.app.env === "production" && !config.app.key) {
+    throw new ConfigurationError("TK1003", "Production'da callback signing uchun APP_KEY majburiy");
+  }
+  if (config.app.key) {
+    const decoded = Buffer.from(config.app.key, "base64");
+    const normalized = config.app.key.replace(/=+$/u, "");
+    const roundTrip = decoded.toString("base64").replace(/=+$/u, "");
+    if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(config.app.key) || decoded.length !== 32 || roundTrip !== normalized) {
+      throw new ConfigurationError("TK1003", "APP_KEY 32 baytli base64 kalit bo'lishi kerak");
+    }
+  }
+  if (![6, 8, 16].includes(config.callbacks.sigBytes)) {
+    throw new ConfigurationError("TK1003", "callbacks.sigBytes faqat 6, 8 yoki 16 bo'lishi mumkin");
+  }
+}
+
 export type ErrorHandler = (error: unknown, ctx: Context) => void | Promise<void>;
+
+/** Small, framework-owned extension contract for reusable middleware/routes. */
+export interface TelekitPlugin {
+  name: string;
+  setup(app: Application): void | Promise<void>;
+}
 
 /**
  * Ties config, the Telegram client, the update pipeline, and routing
- * together into one runnable bot (spec §13 Application lifecycle). This is
- * the v0.1 slice: polling only, no database, no HTTP server — see the
- * roadmap in the spec (§44) for what each later milestone adds.
+ * together into one runnable bot (spec §13 Application lifecycle), with
+ * polling/webhook ingress, bounded concurrency, persistence and graceful
+ * shutdown owned by one lifecycle boundary.
  */
 export class Application {
   readonly router = new Router();
@@ -61,7 +87,7 @@ export class Application {
 
   readonly config: TelekitConfig;
   private readonly dedup: UpdateDedup;
-  private readonly sequencer = new ChatSequencer();
+  private readonly executor: UpdateExecutor;
   private readonly globalMiddleware: Middleware[] = [];
   private readonly userRepository?: UserRepository;
   private readonly lastSeenBuffer = new Set<number>();
@@ -73,6 +99,9 @@ export class Application {
   private shutdownHandlersInstalled = false;
   private translator?: Translator;
   private readonly migrationProviders: MigrationProvider[];
+  private readonly signalHandlers = new Map<NodeJS.Signals, () => void>();
+  private readonly plugins: TelekitPlugin[] = [];
+  private pluginSetupPromise?: Promise<void>;
 
   /**
    * `deps.api`/`deps.db` let tests inject a `TelegramApi` built with a fake
@@ -93,6 +122,7 @@ export class Application {
     config: TelekitConfig,
     deps: { api?: TelegramApi; db?: Kysely<TelekitDatabase> | null; migrationProviders?: MigrationProvider[] } = {},
   ) {
+    assertRuntimeSecurity(config);
     this.config = config;
     this.migrationProviders = [...resolveMigrationProviders(config.database), ...(deps.migrationProviders ?? [])];
     this.log = createLogger({
@@ -107,16 +137,30 @@ export class Application {
         apiRoot: config.telegram.apiRoot,
         timeout: config.telegram.timeout,
         retry: config.telegram.retry,
+        rateLimit: config.telegram.rateLimit,
         logger: this.log.child({ scope: "telegram" }),
       });
     this.db = deps.db !== undefined ? (deps.db ?? undefined) : (createDatabase(config.database) ?? undefined);
     this.userRepository = this.db ? new UserRepository(this.db) : undefined;
     this.dedup = new UpdateDedup(parseDuration(config.dedup.ttl));
+    this.executor = new UpdateExecutor(config.concurrency.global, config.concurrency.perChat, config.concurrency.queueLimit);
     configureKeyboardDecorators(config.keyboards.decorators);
   }
 
   use(middleware: Middleware): this {
     this.globalMiddleware.push(middleware);
+    return this;
+  }
+
+  /** Registers a reusable extension. Setup runs once, before migrations/startup. */
+  plugin(plugin: TelekitPlugin): this {
+    if (this.pluginSetupPromise) {
+      throw new ConfigurationError("TK1051", `Plugin "${plugin.name}" prepare()/start() dan oldin ro'yxatdan o'tkazilishi kerak`);
+    }
+    if (this.plugins.some((registered) => registered.name === plugin.name)) {
+      throw new ConfigurationError("TK1052", `Plugin "${plugin.name}" ikki marta ro'yxatdan o'tkazildi`);
+    }
+    this.plugins.push(plugin);
     return this;
   }
 
@@ -226,6 +270,12 @@ export class Application {
    * calls or its poll loop.
    */
   async prepare(): Promise<void> {
+    this.pluginSetupPromise ??= (async () => {
+      for (const plugin of this.plugins) await plugin.setup(this);
+    })();
+    await this.pluginSetupPromise;
+    // Migration status is deliberately re-checked on every call: production
+    // may fail once, then an operator runs `telekit migrate` and retries.
     await this.ensureMigrations();
   }
 
@@ -277,6 +327,7 @@ export class Application {
       timeout: this.config.bot.polling.timeout,
       limit: this.config.bot.polling.limit,
       onUpdate: (update) => this.handleUpdate(update),
+      maxInFlight: this.config.concurrency.global + this.config.concurrency.queueLimit,
       onError: (err) =>
         this.log.error({ event: "polling.error", err: serializeError(err) }, "Polling xatosi"),
       logger: this.log,
@@ -293,28 +344,35 @@ export class Application {
     const ingressPath = `/telegram/webhook/${secretPath}`;
     const fullUrl = `${this.config.webhook.url}${ingressPath}`;
 
-    const info = await this.api.getWebhookInfo();
-    if (info.url !== fullUrl) {
-      await this.api.setWebhook({
-        url: fullUrl,
-        secret_token: secretToken,
-        max_connections: this.config.webhook.maxConnections,
-        drop_pending_updates: this.config.webhook.dropPendingUpdates,
-      });
-      this.log.info({ event: "startup.webhook_set", url: fullUrl }, "Webhook o'rnatildi");
-    } else {
-      this.log.debug({ event: "startup.webhook_unchanged" }, "Webhook allaqachon to'g'ri URL'da — API chaqirilmadi");
-    }
-
     this.webhookServer = new WebhookServer({
       path: ingressPath,
       secretToken,
       ipAllowlist: this.config.webhook.ipAllowlist,
       responseMode: this.config.webhook.responseMode,
       onUpdate: (update) => this.handleUpdate(update),
+      canAccept: () => this.executor.canAccept(),
       logger: this.log,
     });
     await this.webhookServer.listen(this.config.webhook.port);
+
+    try {
+      const info = await this.api.getWebhookInfo();
+      if (info.url !== fullUrl) {
+        await this.api.setWebhook({
+          url: fullUrl,
+          secret_token: secretToken,
+          max_connections: this.config.webhook.maxConnections,
+          drop_pending_updates: this.config.webhook.dropPendingUpdates,
+        });
+        this.log.info({ event: "startup.webhook_set", url: fullUrl }, "Webhook o'rnatildi");
+      } else {
+        this.log.debug({ event: "startup.webhook_unchanged" }, "Webhook allaqachon to'g'ri URL'da — API chaqirilmadi");
+      }
+    } catch (error) {
+      await this.webhookServer.close();
+      this.webhookServer = undefined;
+      throw error;
+    }
     this.log.info(
       { event: "startup.webhook_listening", port: this.config.webhook.port, path: ingressPath },
       `Webhook tinglamoqda: :${this.config.webhook.port}${ingressPath}`,
@@ -336,12 +394,27 @@ export class Application {
     if (this.stopped) return;
     this.stopped = true;
     this.log.info({ event: "shutdown.begin" }, "To'xtatilmoqda...");
+    this.executor.stopAccepting();
+    this.webhookServer?.setDraining();
     await this.poller?.stop();
+    if (this.config.shutdown.drainDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.config.shutdown.drainDelayMs));
+    }
     await this.webhookServer?.close();
+    let drainError: unknown;
+    try {
+      await this.executor.drain(this.config.shutdown.timeoutMs);
+    } catch (error) {
+      drainError = error;
+      this.log.error({ event: "shutdown.drain_timeout", err: serializeError(error) }, "Update'larni kutish vaqti tugadi");
+    }
     if (this.lastSeenTimer) clearInterval(this.lastSeenTimer);
     await this.flushLastSeen();
     await this.db?.destroy();
+    for (const [signal, handler] of this.signalHandlers) process.removeListener(signal, handler);
+    this.signalHandlers.clear();
     this.log.info({ event: "shutdown.complete" }, "To'xtatildi");
+    if (drainError) throw drainError;
   }
 
   private installShutdownHandlers(): void {
@@ -357,8 +430,11 @@ export class Application {
           process.exit(1);
         });
     };
-    process.once("SIGTERM", onSignal);
-    process.once("SIGINT", onSignal);
+    for (const signal of ["SIGTERM", "SIGINT"] as const) {
+      const handler = () => onSignal(signal);
+      this.signalHandlers.set(signal, handler);
+      process.once(signal, handler);
+    }
   }
 
   /** A 403 "bot was blocked by the user" means the user is unreachable — record it so broadcasts and analytics skip them (spec §30.1, §28.4). */
@@ -432,9 +508,9 @@ export class Application {
       return;
     }
 
-    const chatId = this.config.concurrency.perChat <= 1 ? extractChatId(update) : undefined;
+    const chatId = extractChatId(update);
 
-    await this.sequencer.run(chatId, async () => {
+    await this.executor.run(chatId, async () => {
       const user = await this.upsertUser(update);
       const { locale, t } = this.resolveLocaleAndT(update, user);
       const ctx = createContext(update, { api: this.api, log: this.log, db: this.db, user, locale, t });

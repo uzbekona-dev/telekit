@@ -1,6 +1,9 @@
 {
   "name": "@telekit/conversations",
   "version": "0.1.0",
+  "description": "Replay-safe multi-step conversations for Telekit",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/uzbekona-dev/telekit.git", "directory": "packages/conversations" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

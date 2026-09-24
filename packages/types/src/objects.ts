@@ -343,21 +343,20 @@ export interface TelegramFile {
 
 // ── Media groups (sendMediaGroup) ─────────────────────────
 //
-// `media` is always a wire-level string here: a file_id, an http(s) url, or
-// `attach://<name>` referencing a multipart part. Accepting an uploadable
-// object directly is a `@telekit/core` media-pipeline concern (spec §27),
-// which rewrites those into this shape before calling the API.
+// Uploadable objects are rewritten to attach:// references by the core client.
+
+export type InputMediaFile = string | { readonly filename?: string; toBlob(): Promise<Blob> | Blob };
 
 export interface InputMediaPhoto {
   type: "photo";
-  media: string;
+  media: InputMediaFile;
   caption?: string;
   parse_mode?: string;
 }
 
 export interface InputMediaVideo {
   type: "video";
-  media: string;
+  media: InputMediaFile;
   caption?: string;
   parse_mode?: string;
   width?: number;
@@ -367,14 +366,14 @@ export interface InputMediaVideo {
 
 export interface InputMediaDocument {
   type: "document";
-  media: string;
+  media: InputMediaFile;
   caption?: string;
   parse_mode?: string;
 }
 
 export interface InputMediaAudio {
   type: "audio";
-  media: string;
+  media: InputMediaFile;
   caption?: string;
   parse_mode?: string;
   duration?: number;
@@ -384,7 +383,7 @@ export interface InputMediaAudio {
 
 export interface InputMediaAnimation {
   type: "animation";
-  media: string;
+  media: InputMediaFile;
   caption?: string;
   parse_mode?: string;
   width?: number;

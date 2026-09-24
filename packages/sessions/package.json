@@ -1,6 +1,9 @@
 {
   "name": "@telekit/sessions",
   "version": "0.1.0",
+  "description": "Memory and database sessions for Telekit",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/uzbekona-dev/telekit.git", "directory": "packages/sessions" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

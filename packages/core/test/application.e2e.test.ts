@@ -67,6 +67,14 @@ function fakeTelegramBackend(updates: unknown[]) {
 }
 
 describe("Application end-to-end (polling, no real network)", () => {
+  it("enforces production callback safety even when defineConfig() was bypassed", () => {
+    const unsafe = testConfig({
+      app: { ...DEFAULT_CONFIG.app, env: "production", key: "" },
+      callbacks: { ...DEFAULT_CONFIG.callbacks, sign: false, allowUnsignedInProduction: false },
+    });
+    expect(() => new Application(unsafe, { db: null })).toThrow(/unsigned callback/u);
+  });
+
   it("start() -> a real /start update -> handler runs -> sendMessage is called with the reply", async () => {
     const startUpdate = {
       update_id: 100,
@@ -243,5 +251,27 @@ describe("Application end-to-end (polling, no real network)", () => {
 
     expect(sent).toEqual([{ chat_id: 1, text: "salom" }]);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("initializes a plugin exactly once before handling updates", async () => {
+    const api = new TelegramApi({
+      token: "123:test",
+      fetchImpl: vi.fn().mockResolvedValue(fakeResponse({ ok: true, result: true })) as unknown as typeof fetch,
+    });
+    const app = new Application(testConfig(), { api });
+    const setup = vi.fn((target: Application) => {
+      target.command("plugin", (ctx) => { ctx.state.fromPlugin = true; });
+    });
+    app.plugin({ name: "example", setup });
+
+    await app.prepare();
+    await app.prepare();
+    await app.handleUpdate({
+      update_id: 700,
+      message: { message_id: 1, date: 0, chat: { id: 1, type: "private" }, text: "/plugin" },
+    });
+
+    expect(setup).toHaveBeenCalledTimes(1);
+    expect(() => app.plugin({ name: "late", setup() {} })).toThrow(/prepare/u);
   });
 });

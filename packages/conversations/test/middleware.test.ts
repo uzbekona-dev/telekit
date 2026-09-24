@@ -115,6 +115,25 @@ describe("installConversations — full multi-turn round trip", () => {
     expect(await store.findActive("user-chat:1:1")).toBeNull(); // finished — no longer active
   });
 
+  it("persists ctx.enter params and exposes them as flow.params on every turn", async () => {
+    db = await createTestDatabase();
+    const seen: unknown[] = [];
+    const withParams = defineConversation("with-params", async (flow) => {
+      seen.push(flow.params);
+      await flow.text("Davom eting");
+      seen.push(flow.params);
+    });
+    const store = new DatabaseConversationStore(db);
+    const middleware = installConversations([withParams], { store });
+
+    const first = fakeCtx(textMsg(101, 101, "/start", 1_001));
+    await middleware(first, async () => first.enter!("with-params", { campaign: "spring" }));
+    expect((await store.findActive("user-chat:101:101"))?.params).toEqual({ campaign: "spring" });
+
+    await middleware(fakeCtx(textMsg(101, 101, "ok", 1_002)), vi.fn());
+    expect(seen).toEqual([{ campaign: "spring" }, { campaign: "spring" }, { campaign: "spring" }]);
+  });
+
   it("cancelCommands mid-conversation runs onCancel instead of treating it as an answer", async () => {
     db = await createTestDatabase();
     const store = new DatabaseConversationStore(db);

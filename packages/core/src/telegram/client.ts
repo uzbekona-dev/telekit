@@ -7,6 +7,7 @@ import type {
 import { NetworkError, TelegramApiError } from "../errors.js";
 import type { Logger } from "../logger.js";
 import { type Clock, RealClock } from "../util/clock.js";
+import { TelegramRateLimiter, type RateLimitOptions } from "./rate-limiter.js";
 
 /** Duck-types `params` values against `UploadableFile` — `@telekit/core`'s `InputFile` (spec §27.1) satisfies this without `client.ts` importing it. */
 export function isUploadableFile(value: unknown): value is UploadableFile {
@@ -29,6 +30,7 @@ export interface TelegramClientOptions {
   apiRoot?: string;
   timeout?: number;
   retry?: RetryOptions;
+  rateLimit?: Partial<RateLimitOptions>;
   logger?: Logger;
   fetchImpl?: typeof fetch;
   /** Time source for retry/backoff delays — defaults to `RealClock`. Tests inject a `VirtualClock` to advance past retry waits without actually waiting (spec §28.4). */
@@ -63,6 +65,7 @@ export class TelegramApi {
   private readonly logger?: Logger;
   private readonly fetchImpl: typeof fetch;
   readonly clock: Clock;
+  private readonly rateLimiter: TelegramRateLimiter;
 
   constructor(options: TelegramClientOptions) {
     this.token = options.token;
@@ -72,6 +75,7 @@ export class TelegramApi {
     this.logger = options.logger;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.clock = options.clock ?? new RealClock();
+    this.rateLimiter = new TelegramRateLimiter(options.rateLimit, this.clock);
   }
 
   async call<M extends TelegramMethodName>(
@@ -84,6 +88,7 @@ export class TelegramApi {
 
     let lastError: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await this.rateLimiter.acquire(extractChatId(params), options.signal);
       const started = Date.now();
       try {
         const response = await this.request<TelegramMethods[M]["result"]>(
@@ -247,11 +252,7 @@ export class TelegramApi {
     return this.call("answerInlineQuery", params, options);
   }
 
-  /**
-   * Escape hatch for Bot API methods not yet in `TelegramMethods` (spec
-   * §18.1) — still gets retry/timeout/logging, just no compile-time param
-   * or result typing.
-   */
+  /** Escape hatch for future/custom methods not present in the current Bot API schema. */
   raw<T = unknown>(method: string, params?: Record<string, unknown>, options?: CallOptions): Promise<T> {
     return this.call(method as TelegramMethodName, params as never, options) as Promise<T>;
   }
@@ -282,6 +283,12 @@ export class TelegramApi {
   }
 }
 
+function extractChatId(params: unknown): string | number | undefined {
+  if (!params || typeof params !== "object") return undefined;
+  const chatId = (params as { chat_id?: unknown }).chat_id;
+  return typeof chatId === "string" || typeof chatId === "number" ? chatId : undefined;
+}
+
 /**
  * Builds the fetch `RequestInit` for a call. Params with no `UploadableFile`
  * values (the common case) stay JSON. If any top-level value is an
@@ -293,9 +300,16 @@ export class TelegramApi {
 async function buildRequestInit(params: unknown, signal: AbortSignal): Promise<RequestInit> {
   const entries =
     params && typeof params === "object" ? Object.entries(params as Record<string, unknown>) : [];
-  const hasUpload = entries.some(([, value]) => isUploadableFile(value));
+  const attachments: Array<{ name: string; file: UploadableFile }> = [];
+  const transformed = entries.map(([key, value]) => {
+    if (isUploadableFile(value)) {
+      attachments.push({ name: key, file: value });
+      return [key, undefined] as const;
+    }
+    return [key, replaceNestedUploads(value, attachments)] as const;
+  });
 
-  if (!hasUpload) {
+  if (attachments.length === 0) {
     return {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -305,17 +319,36 @@ async function buildRequestInit(params: unknown, signal: AbortSignal): Promise<R
   }
 
   const form = new FormData();
-  for (const [key, value] of entries) {
-    if (isUploadableFile(value)) {
-      const blob = await value.toBlob();
-      form.append(key, blob, value.filename ?? key);
-    } else if (typeof value === "string") {
+  for (const [key, value] of transformed) {
+    if (value === undefined) continue;
+    if (typeof value === "string") {
       form.append(key, value);
-    } else if (value !== undefined) {
+    } else {
       form.append(key, JSON.stringify(value));
     }
   }
+  for (const { name, file } of attachments) {
+    form.append(name, await file.toBlob(), file.filename ?? name);
+  }
   return { method: "POST", body: form, signal };
+}
+
+function replaceNestedUploads(
+  value: unknown,
+  attachments: Array<{ name: string; file: UploadableFile }>,
+): unknown {
+  if (isUploadableFile(value)) {
+    const name = `file_${attachments.length + 1}`;
+    attachments.push({ name, file: value });
+    return `attach://${name}`;
+  }
+  if (Array.isArray(value)) return value.map((item) => replaceNestedUploads(item, attachments));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, replaceNestedUploads(item, attachments)]),
+    );
+  }
+  return value;
 }
 
 /** Node has no built-in AbortSignal.any() until 20.3 — polyfilled inline for portability. */

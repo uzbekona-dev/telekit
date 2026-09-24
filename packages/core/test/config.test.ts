@@ -120,4 +120,36 @@ describe("defineConfig", () => {
     expect(config.database.driver).toBe("postgres");
     expect(config.database.url).toBe("postgres://user:pass@localhost:5432/db");
   });
+
+  it("rejects an invalid APP_KEY instead of silently decoding weak key material", () => {
+    expect(() => defineConfig({ bot: { token: "123:abc" }, app: { key: "not-a-32-byte-key" } })).toThrow(/APP_KEY/u);
+  });
+
+  it("rejects unsigned callbacks in production unless explicitly acknowledged", () => {
+    expect(() =>
+      defineConfig({
+        bot: { token: "123:abc" },
+        app: { env: "production" },
+        callbacks: { sign: false },
+      }),
+    ).toThrow(/CALLBACKS_SIGN/u);
+
+    expect(
+      defineConfig({
+        bot: { token: "123:abc" },
+        app: { env: "production" },
+        callbacks: { sign: false, allowUnsignedInProduction: true },
+      }).callbacks.sign,
+    ).toBe(false);
+  });
+
+  it("validates integer ranges and supported callback signature lengths", () => {
+    expect(() =>
+      defineConfig({
+        bot: { token: "123:abc", polling: { limit: 101 } },
+        concurrency: { global: 0 },
+        callbacks: { sigBytes: 7 },
+      }),
+    ).toThrow(/BOT_POLLING_LIMIT[\s\S]*CONCURRENCY_GLOBAL[\s\S]*CALLBACK_SIG_BYTES/u);
+  });
 });

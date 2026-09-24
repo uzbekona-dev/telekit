@@ -1,0 +1,31 @@
+name: Bug report
+description: Takrorlanadigan xatoni yuborish
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduksiya
+      description: Minimal kod va aniq qadamlar
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Kutilgan natija
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Amaldagi natija
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Muhit
+      description: Telekit, Node.js, pnpm versiyalari va OS
+    validations:
+      required: true

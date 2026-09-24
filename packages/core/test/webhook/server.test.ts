@@ -148,4 +148,29 @@ describe("WebhookServer", () => {
     expect(res.status).toBe(403);
     expect(onUpdate).not.toHaveBeenCalled();
   });
+
+  it("returns 429 under backpressure and 503 while draining", async () => {
+    const onUpdate = vi.fn();
+    let accepting = false;
+    server = new WebhookServer({
+      path: PATH,
+      secretToken: SECRET,
+      ipAllowlist: false,
+      responseMode: "immediate",
+      canAccept: () => accepting,
+      onUpdate,
+    });
+    await server.listen(0);
+
+    const url = `http://127.0.0.1:${server.port}${PATH}`;
+    const busy = await fetch(url, { method: "POST", headers: baseHeaders(), body: JSON.stringify({ update_id: 8 }) });
+    expect(busy.status).toBe(429);
+    expect(busy.headers.get("retry-after")).toBe("1");
+
+    accepting = true;
+    server.setDraining();
+    const draining = await fetch(url, { method: "POST", headers: baseHeaders(), body: JSON.stringify({ update_id: 9 }) });
+    expect(draining.status).toBe(503);
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
 });

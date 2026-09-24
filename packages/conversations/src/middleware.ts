@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { parseDuration, RealClock, type Clock, type Context, type Middleware } from "@telekit/core";
 import { guardContext, type ConversationDefinition } from "./define-conversation.js";
-import { ConversationNotFoundError, ConversationTooLongError } from "./errors.js";
+import { ConversationConflictError, ConversationNotFoundError, ConversationTooLongError } from "./errors.js";
 import { FlowController } from "./flow.js";
 import { emptyLog, type ConversationLog } from "./log.js";
 import { isConversationPause } from "./pause.js";
@@ -85,10 +85,12 @@ export function installConversations(definitions: ConversationDefinition[], opti
     def: ConversationDefinition,
     ctx: Context,
     hook: ((flow: FlowController) => void | Promise<void>) | undefined,
+    params?: unknown,
   ): Promise<void> {
     if (!hook) return;
     const flow = new FlowController({
       name: def.name,
+      params,
       log: emptyLog(),
       incomingUpdate: undefined,
       ctx, // real ctx — FlowController's own reply()/edit()/delete() must actually send
@@ -128,18 +130,19 @@ export function installConversations(definitions: ConversationDefinition[], opti
 
     // `<=` matches `ConversationStore.findExpired()` — a conversation is expired *at* its deadline, not one tick after.
     if (record.expiresAt && record.expiresAt.getTime() <= clock.now()) {
-      if (await commit({ status: "timeout" }, "timeout")) await runTerminalHook(def, ctx, def.options.onTimeout);
+      if (await commit({ status: "timeout" }, "timeout")) await runTerminalHook(def, ctx, def.options.onTimeout, record.params);
       return;
     }
 
     const text = ctx.message?.text;
     if (!isInitiating && text && def.options.cancelCommands?.includes(text)) {
-      if (await commit({ status: "cancelled" }, "cancelled")) await runTerminalHook(def, ctx, def.options.onCancel);
+      if (await commit({ status: "cancelled" }, "cancelled")) await runTerminalHook(def, ctx, def.options.onCancel, record.params);
       return;
     }
 
     const flow = new FlowController({
       name: def.name,
+      params: record.params,
       log: record.log,
       incomingUpdate: isInitiating ? undefined : ctx.update,
       ctx, // real ctx — FlowController's own reply()/edit()/delete() must actually send
@@ -186,16 +189,25 @@ export function installConversations(definitions: ConversationDefinition[], opti
     }
   }
 
-  async function enter(name: string, ctx: Context, key: string, _params?: unknown): Promise<void> {
+  async function enter(name: string, ctx: Context, key: string, params?: unknown): Promise<void> {
     const def = resolve(name);
-    const created = await options.store.create({
-      id: randomUUID(),
-      key,
-      name,
-      chatId: ctx.chat?.id ?? null,
-      userId: ctx.from?.id ?? null,
-      expiresAt: expiryFor(def),
-    });
+    let created: ConversationRecord;
+    try {
+      created = await options.store.create({
+        id: randomUUID(),
+        key,
+        name,
+        params,
+        chatId: ctx.chat?.id ?? null,
+        userId: ctx.from?.id ?? null,
+        expiresAt: expiryFor(def),
+      });
+    } catch (error) {
+      if (!(error instanceof ConversationConflictError)) throw error;
+      const current = await options.store.findActive(key);
+      ctx.conversation = current ? { name: current.name, status: "active" } : undefined;
+      return;
+    }
     await driveTurn(created, ctx, key, true);
   }
 
@@ -226,7 +238,12 @@ export function installConversations(definitions: ConversationDefinition[], opti
           ctx.log.warn({ event: "conversation.conflict", key, name }, "Faol conversation bor — yangi kirish rad etildi");
           return;
         }
-        await options.store.update(stillActive.id, { status: "done" }, stillActive.version);
+        const replaced = await options.store.update(stillActive.id, { status: "done" }, stillActive.version);
+        if (!replaced) {
+          const current = await options.store.findActive(key);
+          ctx.conversation = current ? { name: current.name, status: "active" } : undefined;
+          return;
+        }
       }
       await enter(name, ctx, key, params);
     };

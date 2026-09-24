@@ -2,20 +2,22 @@
 
 O‘zbekcha developer experience’ga yo‘naltirilgan modular TypeScript Telegram bot framework.
 
-> **Holat: early preview.** Asosiy API ishlaydi va avtomatik testlar bilan qoplangan, ammo loyiha hali production security auditi va yakuniy API barqarorlashtirish bosqichidan o‘tmagan.
+> **Holat: preview.** Asosiy runtime hardening qilingan va avtomatik testlar bilan qoplangan. `1.0` gacha public API’da breaking change bo‘lishi mumkin; katta production deployment oldidan mustaqil security audit tavsiya etiladi.
 
 ## Nimalar bor
 
-- typed Telegram Bot API client;
+- to‘liq typed Telegram Bot API client (`@grammyjs/types` sxemasi asosida);
 - polling va webhook rejimlari;
 - command, event va inline routing;
-- middleware pipeline va per-chat sequencer;
+- middleware pipeline, per-chat ordering, global concurrency va bounded backpressure;
 - HMAC bilan imzolangan callback’lar;
-- memory/database session’lar;
-- replay asosidagi conversation flow’lar;
+- memory/database session’lar, 64 KiB limit va optimistic-lock retry;
+- replay asosidagi conversation flow’lar, saqlanadigan `flow.params`;
 - SQLite va PostgreSQL integratsiyasi;
 - ICU lokalizatsiya;
-- media va fayl yordamchilari;
+- media va nested multipart fayl yordamchilari;
+- outgoing global/per-chat rate limiter va graceful shutdown;
+- reusable `app.plugin(...)` extension kontrakti;
 - CLI, loyiha shablonlari va Telegram’siz test muhiti.
 
 ## Paketlar
@@ -55,19 +57,24 @@ pnpm --filter minimal-bot dev
 
 ## Tekshiruv holati
 
-- 65 ta test fayli
-- 487 ta avtomatik test
+- 68 ta test fayli
+- 507 ta avtomatik test
 - barcha workspace paketlari TypeScript strict mode’da tekshiriladi
+- GitHub Actions’da Node.js 20, 22 va 24 matritsasi
 
 ## Hujjatlar
 
 - [To‘liq texnik topshiriq](./Toliq-TZ.md)
 - [Dastlabki vision hujjati](./Toliq-TZ.v1-vision.md)
 - [Minimal bot namunasi](./examples/minimal-bot)
+- [Plugin yaratish](./docs/plugins.md)
+- [Hissa qo‘shish](./CONTRIBUTING.md)
+- [v1 roadmap](./ROADMAP.md)
+- [Security policy](./SECURITY.md)
 
 ## Hozirgi cheklovlar
 
-Bu versiya o‘rganish, prototiplash va framework rivojiga hissa qo‘shish uchun yaroqli. Production’da ishlatishdan oldin security hardening, global concurrency/backpressure, graceful shutdown va public API stabilizatsiyasi yakunlanishi kerak.
+Runtime’dagi asosiy xavfsizlik va yuklama boshqaruvi mavjud. Qolgan asosiy xavf — loyiha hali `1.0` API stability va keng real-world production tajribasiga yetmagan. Shu sabab preview versiyada versiyani pin qilish va yangilanish changelog’ini tekshirish kerak.
 
 ## Xavfsizlik
 

@@ -1,6 +1,9 @@
 {
   "name": "@telekit/core",
   "version": "0.1.0",
+  "description": "Telekit Telegram bot framework core, routing, lifecycle and Bot API client",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/uzbekona-dev/telekit.git", "directory": "packages/core" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

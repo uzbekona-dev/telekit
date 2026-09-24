@@ -44,10 +44,25 @@ export interface TelekitConfig {
       baseDelay: number;
       maxDelay: number;
     };
+    rateLimit: {
+      enabled: boolean;
+      /** Maximum Bot API requests started per second across this process. */
+      globalPerSecond: number;
+      /** Maximum messages started per second for one chat. */
+      perChatPerSecond: number;
+      /** Short bursts allowed before requests are delayed. */
+      burst: number;
+      /** Pending outgoing calls allowed before backpressure rejects a call. */
+      queueLimit: number;
+    };
   };
   concurrency: {
+    /** Maximum updates executing at once across all chats. */
+    global: number;
     /** 1 = strict per-chat ordering (spec §14.3). >1 disables ordering. */
     perChat: number;
+    /** Pending updates allowed after the global limit is reached. */
+    queueLimit: number;
   };
   dedup: {
     enabled: boolean;
@@ -94,6 +109,8 @@ export interface TelekitConfig {
     pretty: boolean;
   };
   shutdown: {
+    /** Time for a load balancer to observe draining before connections close. */
+    drainDelayMs: number;
     timeoutMs: number;
   };
 }
@@ -121,8 +138,9 @@ export const DEFAULT_CONFIG: TelekitConfig = {
     apiRoot: "https://api.telegram.org",
     timeout: 30_000,
     retry: { enabled: true, attempts: 5, baseDelay: 300, maxDelay: 30_000 },
+    rateLimit: { enabled: true, globalPerSecond: 30, perChatPerSecond: 1, burst: 3, queueLimit: 1_000 },
   },
-  concurrency: { perChat: 1 },
+  concurrency: { global: 100, perChat: 1, queueLimit: 1_000 },
   dedup: { enabled: true, ttl: "5m" },
   database: { driver: "sqlite", file: "storage/telekit.sqlite", url: null, migrations: { providers: [] } },
   // "memory" is the safe zero-dependency default (works with database.driver="none");
@@ -131,7 +149,7 @@ export const DEFAULT_CONFIG: TelekitConfig = {
   callbacks: { sign: true, sigBytes: 6, refTtl: "7d", allowUnsignedInProduction: false },
   keyboards: { decorators: { enabled: false, styles: {} } },
   logging: { level: "info", pretty: true },
-  shutdown: { timeoutMs: 30_000 },
+  shutdown: { drainDelayMs: 0, timeoutMs: 30_000 },
 };
 
 interface EnvProblem {
@@ -176,7 +194,7 @@ class EnvCollector {
       return 0;
     }
     const parsed = Number(value);
-    if (!Number.isFinite(parsed)) {
+    if (!Number.isInteger(parsed)) {
       this.problems.push({ name, reason: `butun son kutilgan, "${value}" keldi` });
       return defaultValue ?? 0;
     }
@@ -256,6 +274,7 @@ function mergeConfig(base: TelekitConfig, input: TelekitConfigInput): TelekitCon
       ...base.telegram,
       ...input.telegram,
       retry: { ...base.telegram.retry, ...input.telegram?.retry },
+      rateLimit: { ...base.telegram.rateLimit, ...input.telegram?.rateLimit },
     },
     concurrency: { ...base.concurrency, ...input.concurrency },
     dedup: { ...base.dedup, ...input.dedup },
@@ -294,20 +313,40 @@ export function defineConfig(input: TelekitConfigInput): TelekitConfig {
   const problems = collected ? [...collected.problems] : [];
   const merged = mergeConfig(DEFAULT_CONFIG, input);
 
+  const addProblem = (name: string, reason: string): void => {
+    if (!problems.some((problem) => problem.name === name)) problems.push({ name, reason });
+  };
+  const requireInteger = (name: string, value: number, min: number, max?: number): void => {
+    if (!Number.isInteger(value) || value < min || (max !== undefined && value > max)) {
+      const range = max === undefined ? `${min} yoki undan katta` : `${min}..${max}`;
+      addProblem(name, `${range} oralig'idagi butun son bo'lishi kerak, ${value} keldi`);
+    }
+  };
+
   if (!merged.bot.token && !problems.some((p) => p.name === "BOT_TOKEN")) {
-    problems.push({ name: "BOT_TOKEN", reason: "majburiy, lekin berilmagan (@BotFather dan oling)" });
+    addProblem("BOT_TOKEN", "majburiy, lekin berilmagan (@BotFather dan oling)");
   }
   if (merged.database.driver === "postgres" && !merged.database.url && !problems.some((p) => p.name === "DATABASE_URL")) {
-    problems.push({
-      name: "DATABASE_URL",
-      reason: 'database.driver="postgres" tanlangan bo\'lsa majburiy (masalan: postgres://user:pass@host:5432/db)',
-    });
+    addProblem("DATABASE_URL", 'database.driver="postgres" tanlangan bo\'lsa majburiy (masalan: postgres://user:pass@host:5432/db)');
   }
   if (merged.bot.mode === "webhook" && !merged.webhook.url && !problems.some((p) => p.name === "PUBLIC_URL")) {
-    problems.push({
-      name: "PUBLIC_URL",
-      reason: 'bot.mode="webhook" tanlangan bo\'lsa majburiy (masalan: https://bot.example.com)',
-    });
+    addProblem("PUBLIC_URL", 'bot.mode="webhook" tanlangan bo\'lsa majburiy (masalan: https://bot.example.com)');
+  }
+  if (merged.webhook.url) {
+    try {
+      const url = new URL(merged.webhook.url);
+      if (url.protocol !== "https:") addProblem("PUBLIC_URL", "webhook URL https:// bilan boshlanishi kerak");
+    } catch {
+      addProblem("PUBLIC_URL", "to'g'ri URL bo'lishi kerak");
+    }
+  }
+  if (merged.app.key) {
+    const normalized = merged.app.key.replace(/=+$/u, "");
+    const decoded = Buffer.from(merged.app.key, "base64");
+    const roundTrip = decoded.toString("base64").replace(/=+$/u, "");
+    if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(merged.app.key) || decoded.length !== 32 || roundTrip !== normalized) {
+      addProblem("APP_KEY", "32 baytli to'g'ri base64 kalit bo'lishi kerak — `telekit key:generate` ishlating");
+    }
   }
   if (
     merged.app.env === "production" &&
@@ -315,16 +354,43 @@ export function defineConfig(input: TelekitConfigInput): TelekitConfig {
     !merged.app.key &&
     !problems.some((p) => p.name === "APP_KEY")
   ) {
-    problems.push({
-      name: "APP_KEY",
-      reason: "production'da callbacks.sign=true bo'lganda majburiy — `telekit key:generate` bilan hosil qiling",
-    });
+    addProblem("APP_KEY", "production'da callbacks.sign=true bo'lganda majburiy — `telekit key:generate` bilan hosil qiling");
+  }
+  if (merged.app.env === "production" && !merged.callbacks.sign && !merged.callbacks.allowUnsignedInProduction) {
+    addProblem(
+      "CALLBACKS_SIGN",
+      "production'da unsigned callback taqiqlangan; callbacks.sign=true qiling yoki xavfni ongli qabul qilib allowUnsignedInProduction=true bering",
+    );
   }
   if (merged.sessions.enabled && merged.sessions.store === "database" && merged.database.driver === "none") {
-    problems.push({
-      name: "SESSIONS_STORE",
-      reason: 'sessions.store="database" tanlangan, lekin database.driver="none" — "memory" ishlating yoki bazani yoqing',
-    });
+    addProblem("SESSIONS_STORE", 'sessions.store="database" tanlangan, lekin database.driver="none" — "memory" ishlating yoki bazani yoqing');
+  }
+
+  // Values returned as placeholders by a failed env.int() must not create a
+  // second, unrelated-looking range error. Semantic ranges run once raw env
+  // parsing itself is clean (plain-object config always reaches this block).
+  if (!collected || collected.problems.length === 0) {
+    requireInteger("BOT_POLLING_TIMEOUT", merged.bot.polling.timeout, 0, 50);
+    requireInteger("BOT_POLLING_LIMIT", merged.bot.polling.limit, 1, 100);
+    requireInteger("WEBHOOK_PORT", merged.webhook.port, 1, 65_535);
+    requireInteger("WEBHOOK_MAX_CONNECTIONS", merged.webhook.maxConnections, 1, 100);
+    requireInteger("TELEGRAM_TIMEOUT", merged.telegram.timeout, 1);
+    requireInteger("TELEGRAM_RETRY_ATTEMPTS", merged.telegram.retry.attempts, 1);
+    requireInteger("TELEGRAM_RETRY_BASE_DELAY", merged.telegram.retry.baseDelay, 0);
+    requireInteger("TELEGRAM_RETRY_MAX_DELAY", merged.telegram.retry.maxDelay, merged.telegram.retry.baseDelay);
+    requireInteger("CONCURRENCY_GLOBAL", merged.concurrency.global, 1);
+    requireInteger("CONCURRENCY_PER_CHAT", merged.concurrency.perChat, 1);
+    requireInteger("CONCURRENCY_QUEUE_LIMIT", merged.concurrency.queueLimit, 0);
+    requireInteger("RATE_LIMIT_GLOBAL", merged.telegram.rateLimit.globalPerSecond, 1);
+    requireInteger("RATE_LIMIT_PER_CHAT", merged.telegram.rateLimit.perChatPerSecond, 1);
+    requireInteger("RATE_LIMIT_BURST", merged.telegram.rateLimit.burst, 1);
+    requireInteger("RATE_LIMIT_QUEUE_LIMIT", merged.telegram.rateLimit.queueLimit, 0);
+    requireInteger("CALLBACK_SIG_BYTES", merged.callbacks.sigBytes, 1, 32);
+    if (![6, 8, 16].includes(merged.callbacks.sigBytes)) {
+      addProblem("CALLBACK_SIG_BYTES", "faqat 6, 8 yoki 16 bayt qo'llab-quvvatlanadi");
+    }
+    requireInteger("SHUTDOWN_DRAIN_DELAY", merged.shutdown.drainDelayMs, 0);
+    requireInteger("SHUTDOWN_TIMEOUT", merged.shutdown.timeoutMs, 1);
   }
   if (problems.length > 0) {
     throw new EnvValidationError(problems);

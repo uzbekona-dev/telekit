@@ -135,6 +135,10 @@ importers:
         version: 3.2.7(@types/node@22.20.3)(supports-color@7.2.0)
 
   packages/types:
+    dependencies:
+      '@grammyjs/types':
+        specifier: ^5.0.0
+        version: 5.0.0
     devDependencies:
       typescript:
         specifier: ^5.7.2
@@ -469,6 +473,9 @@ packages:
 
   '@formatjs/icu-skeleton-parser@2.1.12':
     resolution: {integrity: sha512-ca7tZMLpfHX3sUD7hP6gE/qr6Iq89EDd3ZLeRhbsB7r0UD55DGJq+tmFLzrGrnx5StahUevQmQQVtbDRHsfDHA==}
+
+  '@grammyjs/types@5.0.0':
+    resolution: {integrity: sha512-iq1Qrq1iPKkB8yAa0qSuIURMZOCuqTY5pWy5gHpCeL1oQ+GPadGhw/cDTVE8waJwuCzacUzuIjRv1sESvk7u7A==}
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -1342,6 +1349,8 @@ snapshots:
       '@formatjs/icu-skeleton-parser': 2.1.12
 
   '@formatjs/icu-skeleton-parser@2.1.12': {}
+
+  '@grammyjs/types@5.0.0': {}
 
   '@isaacs/cliui@8.0.2':
     dependencies:

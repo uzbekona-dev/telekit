@@ -111,8 +111,10 @@ describe("defineConfig cross-field checks", () => {
   it("requires APP_KEY for signed callbacks in production only", () => {
     const production = { bot: { token: "1:a" }, app: { env: "production" as const } };
     expect(problemsOf(() => defineConfig(production)).map((p) => p.name)).toEqual(["APP_KEY"]);
-    expect(problemsOf(() => defineConfig({ ...production, callbacks: { sign: false } }))).toEqual([]);
-    expect(problemsOf(() => defineConfig({ ...production, app: { env: "production", key: "a2V5" } }))).toEqual([]);
+    expect(problemsOf(() => defineConfig({ ...production, callbacks: { sign: false } })).map((p) => p.name)).toEqual(["CALLBACKS_SIGN"]);
+    expect(problemsOf(() => defineConfig({ ...production, callbacks: { sign: false, allowUnsignedInProduction: true } }))).toEqual([]);
+    const validKey = Buffer.alloc(32, 7).toString("base64");
+    expect(problemsOf(() => defineConfig({ ...production, app: { env: "production", key: validKey } }))).toEqual([]);
   });
 
   it("rejects a database session store without a database", () => {

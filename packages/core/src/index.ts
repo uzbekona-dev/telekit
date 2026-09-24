@@ -1,4 +1,4 @@
-export { Application, createApplication, type ErrorHandler } from "./application.js";
+export { Application, createApplication, type ErrorHandler, type TelekitPlugin } from "./application.js";
 export type {
   AnswerInlineOptions,
   AudioOptions,
@@ -118,6 +118,12 @@ export { createLogger, maskValue, type LogFields, type Logger, type LoggerOption
 export { compose, type Middleware, type NextFn } from "./middleware.js";
 export { UpdateDedup } from "./pipeline/dedup.js";
 export { ChatSequencer } from "./pipeline/sequencer.js";
+export {
+  ShutdownTimeoutError,
+  UpdateExecutor,
+  UpdateExecutorClosedError,
+  UpdateQueueFullError,
+} from "./pipeline/executor.js";
 export { Router, type CommandDefinition, type EventDefinition, type InlineDefinition } from "./router.js";
 export {
   isUploadableFile,
@@ -126,6 +132,7 @@ export {
   type RetryOptions,
   type TelegramClientOptions,
 } from "./telegram/client.js";
+export { RateLimitQueueFullError, TelegramRateLimiter, type RateLimitOptions } from "./telegram/rate-limiter.js";
 export { Poller, type PollerOptions } from "./telegram/polling.js";
 export { type Clock, RealClock, VirtualClock } from "./util/clock.js";
 export { parseDuration, sleep } from "./util/duration.js";

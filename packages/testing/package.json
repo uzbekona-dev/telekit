@@ -1,6 +1,9 @@
 {
   "name": "@telekit/testing",
   "version": "0.1.0",
+  "description": "Fast Telegram-free bot testing toolkit for Telekit",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/uzbekona-dev/telekit.git", "directory": "packages/testing" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

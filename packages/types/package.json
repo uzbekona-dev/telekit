@@ -1,6 +1,9 @@
 {
   "name": "@telekit/types",
   "version": "0.1.0",
+  "description": "Complete Telegram Bot API and Telekit framework types",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/uzbekona-dev/telekit.git", "directory": "packages/types" },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,12 +13,17 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@grammyjs/types": "^5.0.0"
   }
 }

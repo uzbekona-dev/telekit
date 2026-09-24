@@ -2,6 +2,7 @@ import type { Kysely } from "kysely";
 import type { TelekitDatabase } from "@telekit/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { DatabaseConversationStore } from "../src/store.js";
+import { ConversationConflictError } from "../src/errors.js";
 import { createTestDatabase } from "./helpers/test-db.js";
 
 describe("DatabaseConversationStore", () => {
@@ -15,10 +16,11 @@ describe("DatabaseConversationStore", () => {
     db = await createTestDatabase();
     const store = new DatabaseConversationStore(db);
 
-    await store.create({ id: "c1", key: "user-chat:1:1", name: "register", chatId: 1, userId: 1, expiresAt: null });
+    await store.create({ id: "c1", key: "user-chat:1:1", name: "register", params: { source: "deep-link" }, chatId: 1, userId: 1, expiresAt: null });
     const found = await store.findActive("user-chat:1:1");
 
     expect(found?.name).toBe("register");
+    expect(found?.params).toEqual({ source: "deep-link" });
     expect(found?.status).toBe("active");
     expect(found?.log).toEqual({ version: 1, entries: [] });
     expect(found?.version).toBe(1);
@@ -77,5 +79,18 @@ describe("DatabaseConversationStore", () => {
 
     const expired = await store.findExpired(new Date());
     expect(expired.map((r) => r.id)).toEqual(["c5"]);
+  });
+
+  it("enforces one active conversation per key at the database boundary", async () => {
+    db = await createTestDatabase();
+    const store = new DatabaseConversationStore(db);
+    const first = store.create({ id: "race-a", key: "same", name: "a", chatId: 1, userId: 1, expiresAt: null });
+    const second = store.create({ id: "race-b", key: "same", name: "b", chatId: 1, userId: 1, expiresAt: null });
+
+    const results = await Promise.allSettled([first, second]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    expect(rejected?.reason).toBeInstanceOf(ConversationConflictError);
+    expect((await store.findActive("same"))?.name).toMatch(/^[ab]$/u);
   });
 });

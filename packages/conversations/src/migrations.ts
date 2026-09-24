@@ -1,4 +1,4 @@
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import type { Migration, MigrationProvider } from "kysely/migration";
 
 /** Matches `@telekit/core`'s own `DatabaseDriver` — duplicated here rather than imported to keep this package's public surface independent of core's db internals. */
@@ -48,6 +48,31 @@ function buildMigrations(_dialect: ConversationsDatabaseDriver): Record<string, 
       },
       async down(db: Kysely<any>) {
         await db.schema.dropTable("telekit_conversations").execute();
+      },
+    },
+    conversations_0002_add_params: {
+      async up(db: Kysely<any>) {
+        await db.schema
+          .alterTable("telekit_conversations")
+          .addColumn("params", "text", (column) => column.notNull().defaultTo("null"))
+          .execute();
+      },
+      async down(db: Kysely<any>) {
+        await db.schema.alterTable("telekit_conversations").dropColumn("params").execute();
+      },
+    },
+    conversations_0003_unique_active_key: {
+      async up(db: Kysely<any>) {
+        await db.schema
+          .createIndex("uq_conversations_active_key")
+          .unique()
+          .on("telekit_conversations")
+          .column("key")
+          .where(sql.ref("status"), "=", "active")
+          .execute();
+      },
+      async down(db: Kysely<any>) {
+        await db.schema.dropIndex("uq_conversations_active_key").execute();
       },
     },
   };
