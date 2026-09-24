@@ -1,0 +1,29 @@
+{
+  "welcome": "Здравствуйте, {name}! 👋\n\nБот успешно запущен. Создано с помощью Telekit.",
+  "help": "Доступные команды:\n\n/start — запустить бота\n/help — это сообщение\n/lang — выбрать язык\n/counter — пример callback+keyboard+session\n/profile — ваш профиль\n/register — пример conversation (диалога)",
+  "echo": "Вы написали: {text}",
+  "lang": {
+    "choose": "Выберите язык:"
+  },
+  "counter": {
+    "value": "Счётчик: {count}"
+  },
+  "profile": {
+    "info": "ID: {id}\nИмя: {name}\nДата регистрации: {date}"
+  },
+  "register": {
+    "ask_name": "Введите ваше имя:",
+    "ask_age": "Введите ваш возраст:",
+    "invalid_age": "Пожалуйста, введите число от 14 до 100.",
+    "confirm": "{name}, вам {age} лет. Верно?",
+    "restarted": "Хорошо, начнём заново.",
+    "done": "Спасибо, {name}! Вы зарегистрированы, возраст {age}."
+  },
+  "inline": {
+    "empty_title": "Ничего не найдено",
+    "empty_text": "Попробуйте другое слово."
+  },
+  "errors": {
+    "unexpected": "Извините, произошла ошибка."
+  }
+}

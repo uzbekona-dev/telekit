@@ -1,0 +1,21 @@
+{
+  "name": "minimal-bot",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "telekit dev",
+    "build": "telekit build",
+    "start": "telekit start",
+    "doctor": "telekit doctor"
+  },
+  "dependencies": {
+    "@telekit/callbacks": "workspace:*",
+    "@telekit/core": "workspace:*",
+    "@telekit/sessions": "workspace:*"
+  },
+  "devDependencies": {
+    "@telekit/cli": "workspace:*",
+    "typescript": "^5.7.2"
+  }
+}

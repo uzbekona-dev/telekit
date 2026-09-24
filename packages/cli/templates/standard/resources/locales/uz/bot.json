@@ -1,0 +1,29 @@
+{
+  "welcome": "Assalomu alaykum, {name}! 👋\n\nBot muvaffaqiyatli ishga tushdi. Telekit yordamida yaratildi.",
+  "help": "Mavjud buyruqlar:\n\n/start — botni ishga tushirish\n/help — shu xabar\n/lang — tilni tanlash\n/counter — callback+keyboard+session namunasi\n/profile — profilingiz\n/register — conversation (dialog) namunasi",
+  "echo": "Siz yozdingiz: {text}",
+  "lang": {
+    "choose": "Tilni tanlang:"
+  },
+  "counter": {
+    "value": "Hisoblagich: {count}"
+  },
+  "profile": {
+    "info": "ID: {id}\nIsm: {name}\nA'zo bo'lgan sana: {date}"
+  },
+  "register": {
+    "ask_name": "Ismingizni kiriting:",
+    "ask_age": "Yoshingizni kiriting:",
+    "invalid_age": "Iltimos, 14 dan 100 gacha son kiriting.",
+    "confirm": "{name}, {age} yoshdasiz. To'g'rimi?",
+    "restarted": "Xo'p, qaytadan boshlaymiz.",
+    "done": "Rahmat, {name}! Siz {age} yosh sifatida ro'yxatdan o'tdingiz."
+  },
+  "inline": {
+    "empty_title": "Hech narsa topilmadi",
+    "empty_text": "Boshqa so'z bilan qidirib ko'ring."
+  },
+  "errors": {
+    "unexpected": "Kechirasiz, xatolik yuz berdi."
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "rating": "Botni baholang:",
+  "comment": "Izohingiz bormi?",
+  "low": "Nima yoqmadi?",
+  "thanks": "Rahmat! Bahoyingiz: {rating}. Izoh: {comment}",
+  "contact_saved": "Raqam: {phone}, joy: {where}"
+}

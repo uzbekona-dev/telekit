@@ -1,0 +1,19 @@
+{
+  "name": "__PROJECT_NAME__",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "telekit dev",
+    "build": "telekit build",
+    "start": "telekit start",
+    "doctor": "telekit doctor"
+  },
+  "dependencies": {
+    "@telekit/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "@telekit/cli": "^0.1.0",
+    "typescript": "^5.7.2"
+  }
+}

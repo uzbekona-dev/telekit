@@ -1,0 +1,6 @@
+{
+  "welcome": "Assalomu alaykum, {name}!",
+  "orders": {
+    "count": "{count, plural, one {# ta buyurtma} other {# ta buyurtma}}"
+  }
+}

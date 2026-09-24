@@ -1,0 +1,29 @@
+{
+  "welcome": "Hello, {name}! 👋\n\nThe bot is up and running. Built with Telekit.",
+  "help": "Available commands:\n\n/start — start the bot\n/help — this message\n/lang — choose a language\n/counter — callback+keyboard+session example\n/profile — your profile\n/register — conversation (multi-step dialog) example",
+  "echo": "You wrote: {text}",
+  "lang": {
+    "choose": "Choose a language:"
+  },
+  "counter": {
+    "value": "Counter: {count}"
+  },
+  "profile": {
+    "info": "ID: {id}\nName: {name}\nJoined: {date}"
+  },
+  "register": {
+    "ask_name": "Enter your name:",
+    "ask_age": "Enter your age:",
+    "invalid_age": "Please enter a number between 14 and 100.",
+    "confirm": "{name}, you are {age} years old. Is that right?",
+    "restarted": "OK, let's start over.",
+    "done": "Thanks, {name}! You're registered, age {age}."
+  },
+  "inline": {
+    "empty_title": "Nothing found",
+    "empty_text": "Try another word."
+  },
+  "errors": {
+    "unexpected": "Sorry, something went wrong."
+  }
+}

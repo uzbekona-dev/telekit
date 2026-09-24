@@ -1,0 +1,13 @@
+{
+  "ask_name": "Ismingizni kiriting:",
+  "name_too_short": "Ism kamida 2 harf bo'lsin",
+  "ask_phone": "Telefon raqamingizni yuboring:",
+  "ask_age": "Yoshingiz nechada?",
+  "invalid_age": "14 dan 100 gacha son kiriting",
+  "ask_city": "Shaharni tanlang:",
+  "confirm": "{name}, {age} yosh, {city}. To'g'rimi?",
+  "restarted": "Qaytadan boshlaymiz.",
+  "done": "Rahmat, {name}! Ro'yxatdan o'tdingiz.",
+  "cancelled": "Bekor qilindi.",
+  "timeout": "Vaqt tugadi."
+}

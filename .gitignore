@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*.local
+.env.local
+storage/
+storage/logs/
+.telekit/
+coverage/
+.claude/
